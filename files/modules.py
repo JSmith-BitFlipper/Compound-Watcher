@@ -10,7 +10,7 @@ from web3.auto.infura import w3
 from urllib.request import build_opener
 from termcolor import colored
 from urllib.error import HTTPError
-from pushbullet.pushbullet import PushBullet
+#from pushbullet.pushbullet import PushBullet
 
 with open('keys.txt', 'r') as myfile:
     keys=json.load(myfile)
@@ -32,10 +32,11 @@ contract = w3.eth.contract(address=unitroller, abi=abi)
 
 
 apiKey = keys["pushbullet-api"]
-p = PushBullet(apiKey)
-devices = p.getDevices()
+#p = PushBullet(apiKey)
+#devices = p.getDevices()
 
-site= "https://api.compound.finance/api/v2/account?page_size=20"
+site= "https://api.compound.finance/api/v2/account"
+#site= "https://api.compound.finance/api/v2/account?page_size=20"
 hdr = {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11',
        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
        'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.3',
@@ -78,12 +79,32 @@ def token_symbol(tokenname):
 def api():
     global response
     try:
-        req=urllib.request.Request(site, None, {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11',
-       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-       'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.3',
-       'Accept-Encoding': 'none',
-       'Accept-Language': 'en-US,en;q=0.8',
-       'Connection': 'keep-alive'})
+        data = {
+            "page_size": 100,
+            "max_health": {
+                "value": 1.0
+            },
+            "min_borrow_value_in_eth": {
+                "value": 0.1
+            }
+        }
+        encoded_data = json.dumps(data).encode('utf-8')
+
+        req = urllib.request.Request(
+            site, 
+            encoded_data, 
+            {
+                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.3',
+                'Accept-Encoding': 'none',
+                'Accept-Language': 'en-US,en;q=0.8',
+                'Connection': 'keep-alive',
+                "Content-Type": "application/json"
+            },
+            method="POST",
+        )
+
         cj = CookieJar()
         opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
         response = opener.open(req)
@@ -102,6 +123,7 @@ def parse():
     api()
 
     obj = json.load(response)
+
     ethpr = json.load(eth_price)
     usdeth = float(ethpr["USD"])
     
@@ -120,14 +142,21 @@ def parse():
             balance_supply = token["supply_balance_underlying"]["value"]
             token_address = token["address"]
             if float(balance_supply) > 0:
+                if token_symbol(token_address) is None:
+                    continue
+
                 bresult_supply = "{:.8f} ".format(round(float(balance_supply), 8)) + token_symbol(token_address)
                 balance3 += bresult_supply + "\n"
             if float(balance_borrow) > 0:
+                if token_symbol(token_address) is None:
+                    continue
+
                 bresult_borrow = "{:.8f} ".format(round(float(balance_borrow), 8)) + token_symbol(token_address)
                 balance2 += bresult_borrow + "\n"
         x.add_row([address, round(health, 3), beth_format, balance2, balance3, colored(estimated_p, 'green', attrs=['bold']), onchainliquidity])
         if (((usdeth*beth)/2)*0.05 > 10) and (onchainliquidity == colored("NOT SAFU", 'red', attrs=['bold'])):
-            p.pushNote(devices[0]["iden"], 'Urgent', 'EP ${0} \n{1} \nNOT SAFU \nSend {2}/2 \nReceive {3}'.format(estimated_p, address, balance2, balance3))
+            print('URGENT: EP ${0} \n{1} \nNOT SAFU \nSend {2}/2 \nReceive {3}'.format(estimated_p, address, balance2, balance3))
+            #p.pushNote(devices[0]["iden"], 'Urgent', 'EP ${0} \n{1} \nNOT SAFU \nSend {2}/2 \nReceive {3}'.format(estimated_p, address, balance2, balance3))
 
     print(x)
     time.sleep(20)
